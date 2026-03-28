@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { err, ok, type Result } from "neverthrow";
 import { ConfigError } from "./errors";
+import type { Dialect } from "./dialect";
 
 const relativePath = z
   .string()
@@ -21,8 +22,21 @@ function optionalRelativePath(defaultValue: string) {
   return z.string().default(defaultValue).pipe(relativePath);
 }
 
+const dialectSchema = z.custom<Dialect>(
+  (val) =>
+    typeof val === "object" &&
+    val !== null &&
+    "name" in val &&
+    typeof (val as Dialect).name === "string" &&
+    "parseSchema" in val &&
+    typeof (val as Dialect).parseSchema === "function" &&
+    "generateSQL" in val &&
+    typeof (val as Dialect).generateSQL === "function",
+  { message: "Must be a valid Dialect instance (e.g. pgDialect())" },
+);
+
 export const configSchema = z.object({
-  dialect: z.enum(["pg"]),
+  dialect: dialectSchema,
   queries: optionalRelativePath("./queries"),
   migrations: optionalRelativePath("./migrations"),
   schema: optionalRelativePath("./schema"),

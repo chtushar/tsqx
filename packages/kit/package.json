@@ -8,18 +8,26 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs",
       "types": "./dist/index.d.ts"
+    },
+    "./postgres/pg": {
+      "import": "./dist/postgres/pg/index.mjs",
+      "require": "./dist/postgres/pg/index.cjs",
+      "types": "./dist/postgres/pg/index.d.ts"
     }
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch"
   },
   "dependencies": {
-    "@tsqx/core": "workspace:^"
+    "@tsqx/core": "workspace:^",
+    "neverthrow": "^8.2.0"
   },
   "repository": {
     "type": "git",

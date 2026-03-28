@@ -1,40 +1,45 @@
 import { describe, it, expect } from "vitest";
+import { ok } from "neverthrow";
 import { parseConfig } from "../config";
+import type { Dialect } from "../dialect";
+
+const mockDialect: Dialect = {
+  name: "mock",
+  parseSchema: () => ok({}),
+  generateSQL: () => "",
+};
 
 describe("parseConfig", () => {
   describe("valid configs", () => {
     it("parses a full config", () => {
       const result = parseConfig({
-        dialect: "pg",
+        dialect: mockDialect,
         queries: "./queries",
         migrations: "./migrations",
         schema: "./schema",
       });
 
       expect(result.isOk()).toBe(true);
-      expect(result._unsafeUnwrap()).toEqual({
-        dialect: "pg",
-        queries: "./queries",
-        migrations: "./migrations",
-        schema: "./schema",
-      });
+      const config = result._unsafeUnwrap();
+      expect(config.dialect).toBe(mockDialect);
+      expect(config.queries).toBe("./queries");
+      expect(config.migrations).toBe("./migrations");
+      expect(config.schema).toBe("./schema");
     });
 
     it("applies defaults when paths are omitted", () => {
-      const result = parseConfig({ dialect: "pg" });
+      const result = parseConfig({ dialect: mockDialect });
 
       expect(result.isOk()).toBe(true);
-      expect(result._unsafeUnwrap()).toEqual({
-        dialect: "pg",
-        queries: "./queries",
-        migrations: "./migrations",
-        schema: "./schema",
-      });
+      const config = result._unsafeUnwrap();
+      expect(config.queries).toBe("./queries");
+      expect(config.migrations).toBe("./migrations");
+      expect(config.schema).toBe("./schema");
     });
 
     it("allows partial path overrides", () => {
       const result = parseConfig({
-        dialect: "pg",
+        dialect: mockDialect,
         queries: "./sql",
       });
 
@@ -47,7 +52,7 @@ describe("parseConfig", () => {
 
     it("accepts paths starting with ../", () => {
       const result = parseConfig({
-        dialect: "pg",
+        dialect: mockDialect,
         queries: "../shared/queries",
       });
 
@@ -62,17 +67,22 @@ describe("parseConfig", () => {
       expect(result.isErr()).toBe(true);
     });
 
-    it("rejects unsupported dialect", () => {
-      const result = parseConfig({ dialect: "mysql" });
+    it("rejects a string dialect", () => {
+      const result = parseConfig({ dialect: "pg" });
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().message).toContain("dialect");
+    });
+
+    it("rejects an incomplete dialect object", () => {
+      const result = parseConfig({ dialect: { name: "bad" } });
+      expect(result.isErr()).toBe(true);
     });
   });
 
   describe("invalid paths", () => {
     it("rejects a random string without ./ or ../ prefix", () => {
       const result = parseConfig({
-        dialect: "pg",
+        dialect: mockDialect,
         queries: "random string",
       });
 
@@ -82,7 +92,7 @@ describe("parseConfig", () => {
 
     it("rejects an absolute path", () => {
       const result = parseConfig({
-        dialect: "pg",
+        dialect: mockDialect,
         queries: "/usr/local/queries",
       });
 
@@ -91,7 +101,7 @@ describe("parseConfig", () => {
 
     it("rejects an empty string", () => {
       const result = parseConfig({
-        dialect: "pg",
+        dialect: mockDialect,
         migrations: "",
       });
 
@@ -100,7 +110,7 @@ describe("parseConfig", () => {
 
     it("rejects paths with invalid characters", () => {
       const result = parseConfig({
-        dialect: "pg",
+        dialect: mockDialect,
         queries: './<script>alert("xss")</script>',
       });
 
@@ -110,7 +120,7 @@ describe("parseConfig", () => {
 
     it("rejects paths with null bytes", () => {
       const result = parseConfig({
-        dialect: "pg",
+        dialect: mockDialect,
         queries: "./queries\0evil",
       });
 
@@ -120,7 +130,7 @@ describe("parseConfig", () => {
 
     it("rejects paths exceeding max length", () => {
       const result = parseConfig({
-        dialect: "pg",
+        dialect: mockDialect,
         queries: "./" + "a".repeat(260),
       });
 

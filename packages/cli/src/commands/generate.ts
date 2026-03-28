@@ -1,7 +1,13 @@
 import { resolve, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { defineCommand } from "citty";
-import { parseConfig, logger, TsqxError } from "@tsqx/core";
+import {
+  parseConfig,
+  logger,
+  TsqxError,
+  generateMigrations,
+} from "@tsqx/core";
 
 export const generate = defineCommand({
   meta: {
@@ -43,11 +49,82 @@ export const generate = defineCommand({
       }
       process.exit(1);
     }
+
     const configDir = dirname(configPath);
+    const schemaPath = resolve(configDir, config.schema);
+    const queriesPath = resolve(configDir, config.queries);
+    const migrationsPath = resolve(configDir, config.migrations);
+
     logger.success("Config loaded successfully");
-    logger.step(`dialect: ${config.dialect}`);
-    logger.step(`queries: ${resolve(configDir, config.queries)}`);
-    logger.step(`migrations: ${resolve(configDir, config.migrations)}`);
-    logger.step(`schema: ${resolve(configDir, config.schema)}`);
+
+    // Validate schema directory
+    if (!existsSync(schemaPath)) {
+      logger.error(`Schema directory not found: ${schemaPath}`);
+      process.exit(1);
+    }
+    if (readdirSync(schemaPath).length === 0) {
+      logger.error(`Schema directory is empty: ${schemaPath}`);
+      process.exit(1);
+    }
+    logger.step(`schema: ${schemaPath}`);
+
+    // Validate queries directory
+    if (!existsSync(queriesPath)) {
+      logger.error(`Queries directory not found: ${queriesPath}`);
+      process.exit(1);
+    }
+    if (readdirSync(queriesPath).length === 0) {
+      logger.error(`Queries directory is empty: ${queriesPath}`);
+      process.exit(1);
+    }
+    logger.step(`queries: ${queriesPath}`);
+
+    // Create migrations directory if needed
+    if (!existsSync(migrationsPath)) {
+      mkdirSync(migrationsPath, { recursive: true });
+      logger.step(`migrations: ${migrationsPath} (created)`);
+    } else {
+      logger.step(`migrations: ${migrationsPath}`);
+    }
+
+    // Generate migrations
+    const result = generateMigrations({
+      schemaDir: schemaPath,
+      migrationsDir: migrationsPath,
+      dialect: config.dialect,
+    });
+
+    if (result.isErr()) {
+      logger.error(result.error.message);
+      process.exit(1);
+    }
+
+    const { migrationFile, operations } = result.value;
+
+    if (!migrationFile) {
+      logger.info("No schema changes detected");
+      return;
+    }
+
+    logger.success(`Migration generated: ${migrationFile}`);
+    for (const op of operations) {
+      switch (op.type) {
+        case "create_table":
+          logger.step(`+ CREATE TABLE ${op.table.name}`);
+          break;
+        case "drop_table":
+          logger.step(`- DROP TABLE ${op.tableName}`);
+          break;
+        case "add_column":
+          logger.step(`+ ADD COLUMN ${op.tableName}.${op.column.name}`);
+          break;
+        case "drop_column":
+          logger.step(`- DROP COLUMN ${op.tableName}.${op.columnName}`);
+          break;
+        case "alter_column":
+          logger.step(`~ ALTER COLUMN ${op.tableName}.${op.columnName}`);
+          break;
+      }
+    }
   },
 });

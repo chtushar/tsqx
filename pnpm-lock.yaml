@@ -60,6 +60,9 @@ importers:
       '@tsqx/core':
         specifier: workspace:^
         version: link:../core
+      neverthrow:
+        specifier: ^8.2.0
+        version: 8.2.0
 
 packages:
 

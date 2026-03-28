@@ -90,4 +90,4 @@ export function generateMigrations(options: {
 
 export type { SchemaSnapshot, TableDef, ColumnDef, TableConstraint, Operation, GenerateResult } from "./types";
 export { diffSchemas } from "./differ";
-export { generateJsonSchemas, generateTypeScript } from "./codegen";
+export { generateSchemaFiles } from "./codegen";

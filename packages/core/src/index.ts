@@ -9,11 +9,11 @@ export {
 } from "./errors";
 export { logger } from "./logger";
 export { type Dialect, type JsonSchemaType } from "./dialect";
+export { pascalCase } from "./utils";
 export {
   generateMigrations,
   diffSchemas,
-  generateJsonSchemas,
-  generateTypeScript,
+  generateSchemaFiles,
   type SchemaSnapshot,
   type TableDef,
   type ColumnDef,

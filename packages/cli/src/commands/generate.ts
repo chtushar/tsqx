@@ -7,8 +7,7 @@ import {
   logger,
   TsqxError,
   generateMigrations,
-  generateJsonSchemas,
-  generateTypeScript,
+  generateSchemaFiles,
 } from "@tsqx/core";
 
 export const generate = defineCommand({
@@ -128,25 +127,20 @@ export const generate = defineCommand({
       logger.info("No schema changes detected");
     }
 
-    // Generate JSON Schema + TypeScript types
+    // Generate schema files (TypeScript types + JSON Schema per table)
     const outDir = join(configDir, "generated");
     if (!existsSync(outDir)) {
       mkdirSync(outDir, { recursive: true });
     }
 
-    const jsonSchemas = generateJsonSchemas(snapshot, config.dialect);
-    for (const [tableName, schema] of Object.entries(jsonSchemas)) {
-      const filePath = join(outDir, `${tableName}.schema.json`);
-      writeFileSync(filePath, JSON.stringify(schema, null, 2) + "\n", "utf-8");
+    const schemaFiles = generateSchemaFiles(snapshot, config.dialect);
+    for (const [filename, content] of Object.entries(schemaFiles)) {
+      writeFileSync(join(outDir, filename), content, "utf-8");
     }
 
-    const tsTypes = generateTypeScript(snapshot, config.dialect);
-    writeFileSync(join(outDir, "types.ts"), tsTypes, "utf-8");
-
-    logger.success(`Types generated: ${outDir}`);
-    for (const tableName of Object.keys(jsonSchemas)) {
-      logger.step(`${tableName}.schema.json`);
+    logger.success(`Schema files generated: ${outDir}`);
+    for (const filename of Object.keys(schemaFiles)) {
+      logger.step(filename);
     }
-    logger.step("types.ts");
   },
 });

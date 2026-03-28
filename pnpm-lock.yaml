@@ -39,6 +39,9 @@ importers:
       '@tsqx/core':
         specifier: workspace:^
         version: link:../core
+      citty:
+        specifier: ^0.2.1
+        version: 0.2.1
 
   packages/core:
     dependencies:
@@ -406,6 +409,9 @@ packages:
   cac@7.0.0:
     resolution: {integrity: sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ==}
     engines: {node: '>=20.19.0'}
+
+  citty@0.2.1:
+    resolution: {integrity: sha512-kEV95lFBhQgtogAPlQfJJ0WGVSokvLr/UEoFPiKKOXF7pl98HfUVUD0ejsuTCld/9xH9vogSywZ5KqHzXrZpqg==}
 
   defu@6.1.4:
     resolution: {integrity: sha512-mEQCMmwJu317oSz8CwdIOdwf3xMif1ttiM8LTufzc3g6kR+9Pe236twL8j3IYT1F7GfRgGcW6MWxzZjLIkuHIg==}
@@ -898,6 +904,8 @@ snapshots:
       yaml: 2.8.3
 
   cac@7.0.0: {}
+
+  citty@0.2.1: {}
 
   defu@6.1.4: {}
 

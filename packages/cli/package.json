@@ -3,6 +3,9 @@
   "version": "0.0.3",
   "description": "",
   "type": "module",
+  "bin": {
+    "tsqx": "./dist/index.mjs"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.mjs",
@@ -13,7 +16,9 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch"
@@ -24,7 +29,8 @@
     "directory": "packages/cli"
   },
   "dependencies": {
-    "@tsqx/core": "workspace:^"
+    "@tsqx/core": "workspace:^",
+    "citty": "^0.2.1"
   },
   "keywords": [],
   "license": "ISC"

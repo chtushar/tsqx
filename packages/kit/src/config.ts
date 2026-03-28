@@ -1,8 +1,8 @@
-import { parseConfig, type Config } from "@tsqx/core";
+import { parseConfig, type Config, type ConfigInput } from "@tsqx/core";
 
-export type { Config };
+export type { Config, ConfigInput };
 
-export function defineConfig(config: Config): Config {
+export function defineConfig(config: ConfigInput): Config {
   const result = parseConfig(config);
 
   if (result.isErr()) {

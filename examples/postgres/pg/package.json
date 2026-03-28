@@ -6,7 +6,7 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "@tsqx/core": "workspace:^",
+    "@tsqx/kit": "workspace:^",
     "pg": "latest"
   },
   "devDependencies": {

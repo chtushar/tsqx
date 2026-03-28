@@ -1,5 +1,5 @@
 {
-  "name": "@tsqx/core",
+  "name": "@tsqx/kit",
   "version": "0.0.3",
   "description": "",
   "type": "module",
@@ -13,22 +13,19 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch"
   },
+  "dependencies": {
+    "@tsqx/core": "workspace:^"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/chtushar/tsqx",
-    "directory": "packages/core"
+    "directory": "packages/kit"
   },
   "keywords": [],
-  "license": "ISC",
-  "dependencies": {
-    "neverthrow": "^8.2.0",
-    "zod": "^4.3.6"
-  }
+  "license": "ISC"
 }

@@ -21,3 +21,9 @@ export {
   type Operation,
   type GenerateResult,
 } from "./schema";
+export {
+  parseQueryFiles,
+  type QueryDef,
+  type QueryCommand,
+  type QueryParam,
+} from "./query";

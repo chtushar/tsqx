@@ -9,28 +9,34 @@ export interface OrganizationMembers {
 }
 
 export const OrganizationMembersSchema = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  title: "OrganizationMembers",
-  type: "object",
-  properties: {
-    id: {
-      type: "integer",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OrganizationMembers",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer"
     },
-    organization_id: {
-      type: "integer",
+    "organization_id": {
+      "type": "integer"
     },
-    user_id: {
-      type: "integer",
+    "user_id": {
+      "type": "integer"
     },
-    role: {
-      type: "string",
-      maxLength: 50,
+    "role": {
+      "type": "string",
+      "maxLength": 50
     },
-    created_at: {
-      type: "string",
-      format: "date-time",
-    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
   },
-  required: ["id", "organization_id", "user_id", "role", "created_at"],
-  additionalProperties: false,
+  "required": [
+    "id",
+    "organization_id",
+    "user_id",
+    "role",
+    "created_at"
+  ],
+  "additionalProperties": false
 } as const;

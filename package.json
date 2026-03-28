@@ -3,12 +3,14 @@
   "private": true,
   "scripts": {
     "build": "pnpm -r --filter './packages/*' build",
+    "test": "vitest",
     "release": "bumpp -r"
   },
   "packageManager": "pnpm@10.29.2",
   "devDependencies": {
     "bumpp": "^11.0.1",
     "tsdown": "^0.21.6",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
   }
 }

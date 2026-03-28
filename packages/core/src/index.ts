@@ -1,7 +1,1 @@
-export interface Config {
-  dialect: "pg";
-}
-
-export function defineConfig(config: Config): Config {
-  return config;
-}
+export { defineConfig, type Config } from "./config";

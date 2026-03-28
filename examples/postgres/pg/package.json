@@ -1,0 +1,16 @@
+{
+  "name": "@tsqx/example-postgres-pg",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@tsqx/core": "workspace:^",
+    "pg": "latest"
+  },
+  "devDependencies": {
+    "@types/pg": "latest",
+    "tsx": "latest"
+  }
+}

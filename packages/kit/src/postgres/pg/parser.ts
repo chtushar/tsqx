@@ -31,10 +31,7 @@ function parseColumnDef(raw: string): ColumnDef | null {
   const modifiers = rest.slice(typeMatch[0].length).trim().toUpperCase();
 
   const nullable = !modifiers.includes("NOT NULL");
-  const primaryKey =
-    modifiers.includes("PRIMARY KEY") ||
-    type === "SERIAL" ||
-    type === "BIGSERIAL";
+  const primaryKey = modifiers.includes("PRIMARY KEY");
   const unique = modifiers.includes("UNIQUE");
 
   let defaultValue: string | undefined;

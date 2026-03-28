@@ -127,6 +127,36 @@ describe("generateSQL", () => {
     expect(sql).toContain("ALTER TABLE users ALTER COLUMN active DROP DEFAULT;");
   });
 
+  it("generates ALTER COLUMN for adding UNIQUE", () => {
+    const ops: Operation[] = [
+      {
+        type: "alter_column",
+        tableName: "users",
+        columnName: "email",
+        from: col({ name: "email", type: "VARCHAR(255)", nullable: false }),
+        to: col({ name: "email", type: "VARCHAR(255)", nullable: false, unique: true }),
+      },
+    ];
+
+    const sql = generateSQL(ops);
+    expect(sql).toContain("ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);");
+  });
+
+  it("generates ALTER COLUMN for dropping UNIQUE", () => {
+    const ops: Operation[] = [
+      {
+        type: "alter_column",
+        tableName: "users",
+        columnName: "email",
+        from: col({ name: "email", type: "VARCHAR(255)", unique: true }),
+        to: col({ name: "email", type: "VARCHAR(255)" }),
+      },
+    ];
+
+    const sql = generateSQL(ops);
+    expect(sql).toContain("ALTER TABLE users DROP CONSTRAINT users_email_unique;");
+  });
+
   it("generates DEFAULT in CREATE TABLE columns", () => {
     const ops: Operation[] = [
       {

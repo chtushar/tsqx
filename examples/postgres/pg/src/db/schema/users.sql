@@ -6,3 +6,18 @@ CREATE TABLE users (
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE organizations (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE organization_members (
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    role VARCHAR(50) NOT NULL DEFAULT 'member',
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);

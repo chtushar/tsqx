@@ -97,6 +97,16 @@ function operationToSQL(op: Operation): string {
         }
       }
 
+      if (!from.unique && to.unique) {
+        stmts.push(
+          `ALTER TABLE ${tableName} ADD CONSTRAINT ${tableName}_${columnName}_unique UNIQUE (${columnName});`,
+        );
+      } else if (from.unique && !to.unique) {
+        stmts.push(
+          `ALTER TABLE ${tableName} DROP CONSTRAINT ${tableName}_${columnName}_unique;`,
+        );
+      }
+
       return stmts.join("\n");
     }
   }

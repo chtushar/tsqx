@@ -49,5 +49,92 @@
       }
     ],
     "constraints": []
+  },
+  "organizations": {
+    "name": "organizations",
+    "columns": [
+      {
+        "name": "id",
+        "type": "SERIAL",
+        "nullable": false,
+        "primaryKey": true,
+        "unique": false
+      },
+      {
+        "name": "name",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": false,
+        "default": "NOW()",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": false,
+        "default": "NOW()",
+        "primaryKey": false,
+        "unique": false
+      }
+    ],
+    "constraints": []
+  },
+  "organization_members": {
+    "name": "organization_members",
+    "columns": [
+      {
+        "name": "id",
+        "type": "SERIAL",
+        "nullable": false,
+        "primaryKey": true,
+        "unique": false
+      },
+      {
+        "name": "organization_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "primaryKey": false,
+        "unique": false,
+        "references": {
+          "table": "organizations",
+          "column": "id"
+        }
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": false,
+        "primaryKey": false,
+        "unique": false,
+        "references": {
+          "table": "users",
+          "column": "id"
+        }
+      },
+      {
+        "name": "role",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "'member'",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": false,
+        "default": "NOW()",
+        "primaryKey": false,
+        "unique": false
+      }
+    ],
+    "constraints": []
   }
 }

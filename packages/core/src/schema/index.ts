@@ -1,5 +1,6 @@
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { randomBytes } from "node:crypto";
 import { ok, err, type Result } from "neverthrow";
 import { MigrationError } from "../errors";
 import type { Dialect } from "../dialect";
@@ -51,11 +52,12 @@ export function generateMigrations(options: {
   const sql = dialect.generateSQL(operations);
 
   // 7. Write migration file
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/[-:T]/g, "")
-    .slice(0, 14);
-  const migrationFilename = `${timestamp}_auto.sql`;
+  const existing = readdirSync(migrationsDir).filter((f) =>
+    /^\d{6}_/.test(f),
+  );
+  const nextSeq = String(existing.length + 1).padStart(6, "0");
+  const rand = randomBytes(4).toString("hex");
+  const migrationFilename = `${nextSeq}_${rand}.sql`;
   const migrationPath = join(migrationsDir, migrationFilename);
 
   try {

@@ -45,6 +45,7 @@ export function generateMigrations(options: {
       migrationFile: null,
       operations: [],
       snapshotUpdated: false,
+      snapshot: currentSnapshot,
     });
   }
 
@@ -83,8 +84,10 @@ export function generateMigrations(options: {
     migrationFile: migrationPath,
     operations,
     snapshotUpdated: true,
+    snapshot: currentSnapshot,
   });
 }
 
 export type { SchemaSnapshot, TableDef, ColumnDef, TableConstraint, Operation, GenerateResult } from "./types";
 export { diffSchemas } from "./differ";
+export { generateJsonSchemas, generateTypeScript } from "./codegen";

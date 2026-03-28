@@ -8,10 +8,12 @@ export {
   SchemaError,
 } from "./errors";
 export { logger } from "./logger";
-export { type Dialect } from "./dialect";
+export { type Dialect, type JsonSchemaType } from "./dialect";
 export {
   generateMigrations,
   diffSchemas,
+  generateJsonSchemas,
+  generateTypeScript,
   type SchemaSnapshot,
   type TableDef,
   type ColumnDef,

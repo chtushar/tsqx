@@ -46,4 +46,5 @@ export interface GenerateResult {
   migrationFile: string | null;
   operations: Operation[];
   snapshotUpdated: boolean;
+  snapshot: SchemaSnapshot;
 }

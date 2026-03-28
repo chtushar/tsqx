@@ -1,12 +1,14 @@
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { defineCommand } from "citty";
 import {
   parseConfig,
   logger,
   TsqxError,
   generateMigrations,
+  generateJsonSchemas,
+  generateTypeScript,
 } from "@tsqx/core";
 
 export const generate = defineCommand({
@@ -99,32 +101,52 @@ export const generate = defineCommand({
       process.exit(1);
     }
 
-    const { migrationFile, operations } = result.value;
+    const { migrationFile, operations, snapshot } = result.value;
 
-    if (!migrationFile) {
-      logger.info("No schema changes detected");
-      return;
-    }
-
-    logger.success(`Migration generated: ${migrationFile}`);
-    for (const op of operations) {
-      switch (op.type) {
-        case "create_table":
-          logger.step(`+ CREATE TABLE ${op.table.name}`);
-          break;
-        case "drop_table":
-          logger.step(`- DROP TABLE ${op.tableName}`);
-          break;
-        case "add_column":
-          logger.step(`+ ADD COLUMN ${op.tableName}.${op.column.name}`);
-          break;
-        case "drop_column":
-          logger.step(`- DROP COLUMN ${op.tableName}.${op.columnName}`);
-          break;
-        case "alter_column":
-          logger.step(`~ ALTER COLUMN ${op.tableName}.${op.columnName}`);
-          break;
+    if (migrationFile) {
+      logger.success(`Migration generated: ${migrationFile}`);
+      for (const op of operations) {
+        switch (op.type) {
+          case "create_table":
+            logger.step(`+ CREATE TABLE ${op.table.name}`);
+            break;
+          case "drop_table":
+            logger.step(`- DROP TABLE ${op.tableName}`);
+            break;
+          case "add_column":
+            logger.step(`+ ADD COLUMN ${op.tableName}.${op.column.name}`);
+            break;
+          case "drop_column":
+            logger.step(`- DROP COLUMN ${op.tableName}.${op.columnName}`);
+            break;
+          case "alter_column":
+            logger.step(`~ ALTER COLUMN ${op.tableName}.${op.columnName}`);
+            break;
+        }
       }
+    } else {
+      logger.info("No schema changes detected");
     }
+
+    // Generate JSON Schema + TypeScript types
+    const outDir = join(configDir, "generated");
+    if (!existsSync(outDir)) {
+      mkdirSync(outDir, { recursive: true });
+    }
+
+    const jsonSchemas = generateJsonSchemas(snapshot, config.dialect);
+    for (const [tableName, schema] of Object.entries(jsonSchemas)) {
+      const filePath = join(outDir, `${tableName}.schema.json`);
+      writeFileSync(filePath, JSON.stringify(schema, null, 2) + "\n", "utf-8");
+    }
+
+    const tsTypes = generateTypeScript(snapshot, config.dialect);
+    writeFileSync(join(outDir, "types.ts"), tsTypes, "utf-8");
+
+    logger.success(`Types generated: ${outDir}`);
+    for (const tableName of Object.keys(jsonSchemas)) {
+      logger.step(`${tableName}.schema.json`);
+    }
+    logger.step("types.ts");
   },
 });

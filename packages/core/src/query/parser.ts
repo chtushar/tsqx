@@ -1,54 +1,151 @@
 import { ok, err, type Result } from "neverthrow";
 import { QueryError } from "../errors";
 import type { SchemaSnapshot } from "../schema/types";
-import type { QueryDef, QueryCommand, QueryParam } from "./types";
+import type { QueryDef, QueryCommand, QueryParam, MixinDef } from "./types";
 
-const QUERY_ANNOTATION = /^--\s*name:\s*(\w+)\s+:(one|many|exec|execrows|execresult)\s*$/i;
+const QUERY_ANNOTATION = /^--\s*@name\s+(\w+)\s+:(one|many|exec|execrows|execresult)\s*$/i;
+const MIXIN_ANNOTATION = /^--\s*@mixin\s+(\w+)\(([^)]*)\)\s*$/i;
+const INCLUDE_DIRECTIVE = /--\s*@include\s+(\w+)/i;
 
-function stripComments(sql: string): string {
-  // Remove block comments but not annotation comments
+function stripBlockComments(sql: string): string {
   return sql.replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
-function resolveParamType(
-  sql: string,
-  paramIndex: number,
-  snapshot: SchemaSnapshot,
-): { name: string; sqlType: string } | null {
-  // Try to match $N against column references in WHERE, SET, VALUES, etc.
-  const paramPlaceholder = `\\$${paramIndex}`;
+function isDirective(line: string): boolean {
+  return QUERY_ANNOTATION.test(line) || MIXIN_ANNOTATION.test(line);
+}
 
-  // Pattern: column = $N or column=$N
-  const whereMatch = sql.match(
-    new RegExp(`(\\w+)\\s*=\\s*${paramPlaceholder}(?:\\s|,|\\)|;|$)`, "i"),
-  );
-  if (whereMatch) {
-    const columnName = whereMatch[1].toLowerCase();
-    return findColumnInSnapshot(columnName, sql, snapshot);
+// --- Mixin expansion ---
+
+function expandMixins(
+  sql: string,
+  mixins: Map<string, MixinDef>,
+  sourceFile: string,
+): Result<string, QueryError> {
+  let expanded = sql;
+  let iterations = 0;
+  const maxIterations = 10;
+
+  while (INCLUDE_DIRECTIVE.test(expanded)) {
+    if (iterations++ >= maxIterations) {
+      return err(new QueryError(`Circular @include detected in ${sourceFile}`));
+    }
+
+    expanded = expanded.replace(INCLUDE_DIRECTIVE, (_, mixinName) => {
+      const mixin = mixins.get(mixinName);
+      if (!mixin) return `/* ERROR: unknown mixin "${mixinName}" */`;
+      return mixin.body;
+    });
   }
 
-  // Pattern: VALUES (..., $N, ...) — match by position against INSERT column list
+  return ok(expanded);
+}
+
+// --- Named param resolution ---
+
+interface InlineTypeHint {
+  name: string;
+  sqlType: string;
+}
+
+function extractInlineTypeHints(sql: string): { cleaned: string; hints: InlineTypeHint[] } {
+  const hints: InlineTypeHint[] = [];
+  // Match $name::type patterns in SQL and strip the ::type part
+  const cleaned = sql.replace(
+    /\$([a-zA-Z_]\w*)::(\w+(?:\s+\w+)?(?:\(\d+\))?)/g,
+    (_, name, type) => {
+      hints.push({ name, sqlType: type.toUpperCase() });
+      return `$${name}`;
+    },
+  );
+  return { cleaned, hints };
+}
+
+function extractNamedParams(sql: string): string[] {
+  const matches = sql.match(/\$([a-zA-Z_]\w*)/g);
+  if (!matches) return [];
+
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const m of matches) {
+    const name = m.slice(1);
+    if (!seen.has(name)) {
+      seen.add(name);
+      names.push(name);
+    }
+  }
+  return names;
+}
+
+function namedToPositional(sql: string, paramNames: string[]): string {
+  let result = sql;
+  for (let i = 0; i < paramNames.length; i++) {
+    result = result.replace(
+      new RegExp(`\\$${paramNames[i]}(?![a-zA-Z_\\d])`, "g"),
+      `$${i + 1}`,
+    );
+  }
+  return result;
+}
+
+function resolveParamType(
+  paramName: string,
+  sql: string,
+  snapshot: SchemaSnapshot,
+  mixinParams: Map<string, { nullable: boolean; sqlType?: string }>,
+): { sqlType: string; nullable: boolean } {
+  const mixinParam = mixinParams.get(paramName);
+  const isNullable = mixinParam?.nullable ?? false;
+
+  // If mixin provides an explicit type annotation, use it
+  if (mixinParam?.sqlType) {
+    return { sqlType: mixinParam.sqlType, nullable: isNullable };
+  }
+
+  // Try to find the column this param maps to
+  // Pattern: column = $param or column=$param
+  const colMatch = sql.match(
+    new RegExp(`"?(\\w+)"?\\s*=\\s*\\$${paramName}(?![a-zA-Z_\\d])`, "i"),
+  );
+  if (colMatch) {
+    const columnName = colMatch[1].toLowerCase();
+    const resolved = findColumnInSnapshot(columnName, sql, snapshot);
+    if (resolved) {
+      return { sqlType: resolved.sqlType, nullable: isNullable };
+    }
+  }
+
+  // Pattern: INSERT INTO table (cols) VALUES ($params) — match by name
   const insertMatch = sql.match(
     /INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i,
   );
   if (insertMatch) {
+    const tableName = insertMatch[1].toLowerCase();
     const columns = insertMatch[2].split(",").map((c) => c.trim().toLowerCase());
     const values = insertMatch[3].split(",").map((v) => v.trim());
-    const paramPos = values.findIndex((v) => v === `$${paramIndex}`);
+    const paramPos = values.findIndex(
+      (v) => v === `$${paramName}` || v.startsWith(`$${paramName}:`),
+    );
     if (paramPos !== -1 && paramPos < columns.length) {
-      const tableName = insertMatch[1].toLowerCase();
-      const columnName = columns[paramPos];
       const table = snapshot[tableName];
       if (table) {
-        const col = table.columns.find((c) => c.name === columnName);
+        const col = table.columns.find((c) => c.name === columns[paramPos]);
         if (col) {
-          return { name: columnName, sqlType: col.type };
+          return { sqlType: col.type, nullable: isNullable };
         }
       }
     }
   }
 
-  return null;
+  // Pattern: ILIKE '%' || $param || '%' — likely a text param
+  const ilikeMatch = sql.match(
+    new RegExp(`ILIKE.*\\$${paramName}`, "i"),
+  );
+  if (ilikeMatch) {
+    return { sqlType: "TEXT", nullable: isNullable };
+  }
+
+  return { sqlType: "TEXT", nullable: isNullable };
 }
 
 function findColumnInSnapshot(
@@ -56,59 +153,36 @@ function findColumnInSnapshot(
   sql: string,
   snapshot: SchemaSnapshot,
 ): { name: string; sqlType: string } | null {
-  // Extract table name from FROM or UPDATE or INSERT INTO
-  const tableMatch = sql.match(
-    /(?:FROM|UPDATE|INSERT\s+INTO)\s+(\w+)/i,
-  );
-  if (!tableMatch) return null;
-
-  const tableName = tableMatch[1].toLowerCase();
-  const table = snapshot[tableName];
-  if (!table) return null;
-
-  const col = table.columns.find((c) => c.name === columnName);
-  if (!col) return null;
-
-  return { name: columnName, sqlType: col.type };
-}
-
-function extractParams(
-  sql: string,
-  snapshot: SchemaSnapshot,
-): QueryParam[] {
-  const paramMatches = sql.match(/\$\d+/g);
-  if (!paramMatches) return [];
-
-  const indices = [...new Set(paramMatches.map((p) => parseInt(p.slice(1), 10)))].sort(
-    (a, b) => a - b,
+  // Try all tables referenced in the query
+  const tableMatches = sql.matchAll(
+    /(?:FROM|UPDATE|INSERT\s+INTO|JOIN)\s+(\w+)/gi,
   );
 
-  return indices.map((index) => {
-    const resolved = resolveParamType(sql, index, snapshot);
-    return {
-      index,
-      name: resolved?.name ?? `param${index}`,
-      sqlType: resolved?.sqlType ?? "TEXT",
-    };
-  });
+  for (const match of tableMatches) {
+    const tableName = match[1].toLowerCase();
+    const table = snapshot[tableName];
+    if (!table) continue;
+
+    const col = table.columns.find((c) => c.name === columnName);
+    if (col) return { name: columnName, sqlType: col.type };
+  }
+
+  return null;
 }
 
 function resolveReturnsTable(sql: string, snapshot: SchemaSnapshot): string | null {
-  // SELECT * FROM table or SELECT ... FROM table
   const fromMatch = sql.match(/FROM\s+(\w+)/i);
   if (fromMatch) {
     const tableName = fromMatch[1].toLowerCase();
     if (snapshot[tableName]) return tableName;
   }
 
-  // INSERT INTO table ... RETURNING
   const insertMatch = sql.match(/INSERT\s+INTO\s+(\w+)/i);
   if (insertMatch && /RETURNING/i.test(sql)) {
     const tableName = insertMatch[1].toLowerCase();
     if (snapshot[tableName]) return tableName;
   }
 
-  // UPDATE table ... RETURNING
   const updateMatch = sql.match(/UPDATE\s+(\w+)/i);
   if (updateMatch && /RETURNING/i.test(sql)) {
     const tableName = updateMatch[1].toLowerCase();
@@ -121,12 +195,10 @@ function resolveReturnsTable(sql: string, snapshot: SchemaSnapshot): string | nu
 function resolveReturnsColumns(sql: string, tableName: string | null, snapshot: SchemaSnapshot): string[] {
   if (!tableName || !snapshot[tableName]) return [];
 
-  // SELECT * or RETURNING *
   if (/SELECT\s+\*/i.test(sql) || /RETURNING\s+\*/i.test(sql)) {
     return snapshot[tableName].columns.map((c) => c.name);
   }
 
-  // SELECT col1, col2 FROM table
   const selectMatch = sql.match(/SELECT\s+(.+?)\s+FROM/i);
   if (selectMatch) {
     return selectMatch[1]
@@ -135,7 +207,6 @@ function resolveReturnsColumns(sql: string, tableName: string | null, snapshot: 
       .filter((c) => c !== "*");
   }
 
-  // RETURNING col1, col2
   const returningMatch = sql.match(/RETURNING\s+(.+?)(?:;|\s*$)/i);
   if (returningMatch) {
     return returningMatch[1]
@@ -147,47 +218,189 @@ function resolveReturnsColumns(sql: string, tableName: string | null, snapshot: 
   return [];
 }
 
+// --- SQL validation ---
+
+function validateExpandedSql(sql: string, queryName: string): Result<void, QueryError> {
+  const trimmed = sql.trim();
+
+  // Must end with semicolon
+  if (!trimmed.endsWith(";")) {
+    return err(new QueryError(`Query "${queryName}" does not end with a semicolon`));
+  }
+
+  // Must start with a valid SQL keyword
+  const validStarts = /^(SELECT|INSERT|UPDATE|DELETE|WITH)\s/i;
+  if (!validStarts.test(trimmed)) {
+    return err(new QueryError(`Query "${queryName}" does not start with a valid SQL statement`));
+  }
+
+  // Check for unresolved @include directives
+  if (INCLUDE_DIRECTIVE.test(trimmed)) {
+    return err(new QueryError(`Query "${queryName}" has unresolved @include directives`));
+  }
+
+  // Check for unresolved named params (should all be converted to positional)
+  // This is checked on the positional version, so skip here
+
+  // Check balanced parentheses
+  let depth = 0;
+  for (const char of trimmed) {
+    if (char === "(") depth++;
+    if (char === ")") depth--;
+    if (depth < 0) {
+      return err(new QueryError(`Query "${queryName}" has unbalanced parentheses`));
+    }
+  }
+  if (depth !== 0) {
+    return err(new QueryError(`Query "${queryName}" has unbalanced parentheses`));
+  }
+
+  return ok(undefined);
+}
+
+// --- Main parser ---
+
+function collectBody(lines: string[], startIndex: number): { body: string; endIndex: number } {
+  const sqlLines: string[] = [];
+  let i = startIndex;
+  while (i < lines.length) {
+    const nextLine = lines[i].trim();
+    if (isDirective(nextLine)) break;
+    if (nextLine) sqlLines.push(nextLine);
+    i++;
+  }
+  return { body: sqlLines.join("\n"), endIndex: i };
+}
+
 export function parseQueryFile(
   filename: string,
   content: string,
   snapshot: SchemaSnapshot,
-): Result<QueryDef[], QueryError> {
-  const clean = stripComments(content);
+): Result<{ queries: QueryDef[]; mixins: MixinDef[] }, QueryError> {
+  const clean = stripBlockComments(content);
   const lines = clean.split("\n");
   const queries: QueryDef[] = [];
+  const mixins: MixinDef[] = [];
+  const mixinMap = new Map<string, MixinDef>();
 
+  // First pass: collect mixins
   let i = 0;
   while (i < lines.length) {
     const line = lines[i].trim();
-    const match = line.match(QUERY_ANNOTATION);
+    const mixinMatch = line.match(MIXIN_ANNOTATION);
 
-    if (match) {
-      const name = match[1];
-      const command = match[2].toLowerCase() as QueryCommand;
+    if (mixinMatch) {
+      const name = mixinMatch[1];
+      const rawParams = mixinMatch[2].trim();
+      const params = rawParams
+        ? rawParams.split(",").map((p) => {
+            const trimmed = p.trim().replace(/^\$/, "");
+            const nullable = trimmed.endsWith("?");
+            const clean = nullable ? trimmed.slice(0, -1) : trimmed;
+            // Support $name::type syntax
+            const typeMatch = clean.match(/^(\w+)::(\w+(?:\s+\w+)?(?:\(\d+\))?)$/);
+            if (typeMatch) {
+              return {
+                name: typeMatch[1],
+                nullable,
+                sqlType: typeMatch[2].toUpperCase(),
+              };
+            }
+            return {
+              name: clean,
+              nullable,
+            };
+          })
+        : [];
 
-      // Collect SQL lines until the next annotation or end of file
-      const sqlLines: string[] = [];
       i++;
+      const { body, endIndex } = collectBody(lines, i);
+      i = endIndex;
+
+      const mixin: MixinDef = { name, params, body, sourceFile: filename };
+      mixins.push(mixin);
+      mixinMap.set(name, mixin);
+    } else {
+      i++;
+    }
+  }
+
+  // Second pass: collect queries
+  i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    const queryMatch = line.match(QUERY_ANNOTATION);
+
+    if (queryMatch) {
+      const name = queryMatch[1];
+      const command = queryMatch[2].toLowerCase() as QueryCommand;
+
+      i++;
+      // Collect SQL lines — allow @include inline
+      const sqlLines: string[] = [];
       while (i < lines.length) {
         const nextLine = lines[i].trim();
-        if (QUERY_ANNOTATION.test(nextLine)) break;
+        if (isDirective(nextLine)) break;
         if (nextLine) sqlLines.push(nextLine);
         i++;
       }
 
-      const sql = sqlLines.join("\n");
-      if (!sql) {
+      const rawSql = sqlLines.join("\n");
+      if (!rawSql) {
         return err(new QueryError(`Empty query body for "${name}" in ${filename}`));
       }
 
-      const params = extractParams(sql, snapshot);
-      const returnsTable = resolveReturnsTable(sql, snapshot);
-      const returnsColumns = resolveReturnsColumns(sql, returnsTable, snapshot);
+      // Expand mixins
+      const expandResult = expandMixins(rawSql, mixinMap, filename);
+      if (expandResult.isErr()) return err(expandResult.error);
+      const expandedSql = expandResult.value;
+
+      // Extract inline type hints ($name::type) and strip them from SQL
+      const { cleaned: cleanedSql, hints: inlineHints } = extractInlineTypeHints(expandedSql);
+
+      // Validate the cleaned SQL
+      const validationResult = validateExpandedSql(cleanedSql, name);
+      if (validationResult.isErr()) return err(validationResult.error);
+
+      // Collect param info from mixins (nullable + type annotations)
+      const mixinParamInfo = new Map<string, { nullable: boolean; sqlType?: string }>();
+      for (const mixin of mixins) {
+        for (const p of mixin.params) {
+          mixinParamInfo.set(p.name, { nullable: p.nullable, sqlType: p.sqlType });
+        }
+      }
+      // Inline type hints override mixin/inferred types
+      for (const hint of inlineHints) {
+        const existing = mixinParamInfo.get(hint.name);
+        mixinParamInfo.set(hint.name, {
+          nullable: existing?.nullable ?? false,
+          sqlType: hint.sqlType,
+        });
+      }
+
+      // Extract named params and convert to positional
+      const namedParams = extractNamedParams(cleanedSql);
+      const positionalSql = namedToPositional(cleanedSql, namedParams);
+
+      // Resolve param types
+      const params: QueryParam[] = namedParams.map((paramName, idx) => {
+        const resolved = resolveParamType(paramName, cleanedSql, snapshot, mixinParamInfo);
+        return {
+          index: idx + 1,
+          name: paramName,
+          sqlType: resolved.sqlType,
+          nullable: resolved.nullable,
+        };
+      });
+
+      const returnsTable = resolveReturnsTable(cleanedSql, snapshot);
+      const returnsColumns = resolveReturnsColumns(cleanedSql, returnsTable, snapshot);
 
       queries.push({
         name,
         command,
-        sql,
+        sql: rawSql,
+        expandedSql: positionalSql,
         params,
         returnsTable,
         returnsColumns,
@@ -198,22 +411,148 @@ export function parseQueryFile(
     }
   }
 
-  return ok(queries);
+  return ok({ queries, mixins });
 }
 
 export function parseQueryFiles(
   files: Array<{ filename: string; content: string }>,
   snapshot: SchemaSnapshot,
 ): Result<QueryDef[], QueryError> {
+  // First pass: collect all mixins across all files
+  const globalMixins = new Map<string, MixinDef>();
+
+  for (const file of files) {
+    const clean = stripBlockComments(file.content);
+    const lines = clean.split("\n");
+
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i].trim();
+      const mixinMatch = line.match(MIXIN_ANNOTATION);
+
+      if (mixinMatch) {
+        const name = mixinMatch[1];
+        const rawParams = mixinMatch[2].trim();
+        const params = rawParams
+          ? rawParams.split(",").map((p) => {
+              const trimmed = p.trim().replace(/^\$/, "");
+              const nullable = trimmed.endsWith("?");
+              const clean = nullable ? trimmed.slice(0, -1) : trimmed;
+              const typeMatch = clean.match(/^(\w+)::(\w+(?:\s+\w+)?(?:\(\d+\))?)$/);
+              if (typeMatch) {
+                return { name: typeMatch[1], nullable, sqlType: typeMatch[2].toUpperCase() };
+              }
+              return { name: clean, nullable };
+            })
+          : [];
+
+        i++;
+        const { body, endIndex } = collectBody(lines, i);
+        i = endIndex;
+
+        if (globalMixins.has(name)) {
+          return err(new QueryError(`Duplicate mixin name "${name}" in ${file.filename}`));
+        }
+        globalMixins.set(name, { name, params, body, sourceFile: file.filename });
+      } else {
+        i++;
+      }
+    }
+  }
+
+  // Second pass: parse queries using global mixins
   const allQueries: QueryDef[] = [];
 
   for (const file of files) {
-    const result = parseQueryFile(file.filename, file.content, snapshot);
-    if (result.isErr()) return result;
-    allQueries.push(...result.value);
+    const clean = stripBlockComments(file.content);
+    const lines = clean.split("\n");
+
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i].trim();
+      const queryMatch = line.match(QUERY_ANNOTATION);
+
+      if (queryMatch) {
+        const name = queryMatch[1];
+        const command = queryMatch[2].toLowerCase() as QueryCommand;
+
+        i++;
+        const sqlLines: string[] = [];
+        while (i < lines.length) {
+          const nextLine = lines[i].trim();
+          if (isDirective(nextLine)) break;
+          // Stop after a line ending with ; (statement complete)
+          if (nextLine) {
+            sqlLines.push(nextLine);
+            if (nextLine.endsWith(";")) {
+              i++;
+              break;
+            }
+          }
+          i++;
+        }
+
+        const rawSql = sqlLines.join("\n");
+        if (!rawSql) {
+          return err(new QueryError(`Empty query body for "${name}" in ${file.filename}`));
+        }
+
+        const expandResult = expandMixins(rawSql, globalMixins, file.filename);
+        if (expandResult.isErr()) return err(expandResult.error);
+        const expandedSql = expandResult.value;
+
+        const { cleaned: cleanedSql, hints: inlineHints } = extractInlineTypeHints(expandedSql);
+
+        const validationResult = validateExpandedSql(cleanedSql, name);
+        if (validationResult.isErr()) return err(validationResult.error);
+
+        const mixinParamInfo = new Map<string, { nullable: boolean; sqlType?: string }>();
+        for (const mixin of globalMixins.values()) {
+          for (const p of mixin.params) {
+            mixinParamInfo.set(p.name, { nullable: p.nullable, sqlType: p.sqlType });
+          }
+        }
+        for (const hint of inlineHints) {
+          const existing = mixinParamInfo.get(hint.name);
+          mixinParamInfo.set(hint.name, {
+            nullable: existing?.nullable ?? false,
+            sqlType: hint.sqlType,
+          });
+        }
+
+        const namedParams = extractNamedParams(cleanedSql);
+        const positionalSql = namedToPositional(cleanedSql, namedParams);
+
+        const params: QueryParam[] = namedParams.map((paramName, idx) => {
+          const resolved = resolveParamType(paramName, cleanedSql, snapshot, mixinParamInfo);
+          return {
+            index: idx + 1,
+            name: paramName,
+            sqlType: resolved.sqlType,
+            nullable: resolved.nullable,
+          };
+        });
+
+        const returnsTable = resolveReturnsTable(cleanedSql, snapshot);
+        const returnsColumns = resolveReturnsColumns(cleanedSql, returnsTable, snapshot);
+
+        allQueries.push({
+          name,
+          command,
+          sql: rawSql,
+          expandedSql: positionalSql,
+          params,
+          returnsTable,
+          returnsColumns,
+          sourceFile: file.filename,
+        });
+      } else {
+        i++;
+      }
+    }
   }
 
-  // Check for duplicate names
+  // Check for duplicate query names
   const names = new Set<string>();
   for (const query of allQueries) {
     if (names.has(query.name)) {

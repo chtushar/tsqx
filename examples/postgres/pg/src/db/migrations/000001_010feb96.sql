@@ -1,0 +1,84 @@
+BEGIN;
+
+CREATE TABLE traces (
+  id UUID PRIMARY KEY,
+  traceid VARCHAR(255) NOT NULL UNIQUE,
+  name VARCHAR(255),
+  sessionid VARCHAR(255),
+  userid VARCHAR(255),
+  status VARCHAR(10) NOT NULL DEFAULT 'unset',
+  starttime TIMESTAMP NOT NULL,
+  endtime TIMESTAMP,
+  durationms INTEGER,
+  spancount INTEGER NOT NULL DEFAULT 0,
+  totalinputtokens INTEGER NOT NULL DEFAULT 0,
+  totaloutputtokens INTEGER NOT NULL DEFAULT 0,
+  totaltokens INTEGER NOT NULL DEFAULT 0,
+  totalcost INTEGER NOT NULL DEFAULT 0,
+  tags JSONB NOT NULL DEFAULT '{}',
+  metadata JSONB NOT NULL DEFAULT '{}',
+  createdat TIMESTAMP NOT NULL DEFAULT NOW(),
+  updatedat TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE spans (
+  id UUID PRIMARY KEY,
+  traceid VARCHAR(255) NOT NULL REFERENCES traces(traceid),
+  spanid VARCHAR(255) NOT NULL UNIQUE,
+  parentspanid VARCHAR(255),
+  name VARCHAR(255) NOT NULL,
+  kind INTEGER NOT NULL DEFAULT 1,
+  status INTEGER NOT NULL DEFAULT 0,
+  statusmessage TEXT,
+  starttime TIMESTAMP NOT NULL,
+  endtime TIMESTAMP,
+  durationms INTEGER,
+  provider VARCHAR(255),
+  model VARCHAR(255),
+  prompttokens INTEGER NOT NULL DEFAULT 0,
+  completiontokens INTEGER NOT NULL DEFAULT 0,
+  totaltokens INTEGER NOT NULL DEFAULT 0,
+  cost INTEGER NOT NULL DEFAULT 0,
+  source VARCHAR(50) NOT NULL DEFAULT 'gateway',
+  input JSONB,
+  output JSONB,
+  attributes JSONB NOT NULL DEFAULT '{}',
+  createdat TIMESTAMP NOT NULL DEFAULT NOW(),
+  updatedat TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE span_events (
+  id UUID PRIMARY KEY,
+  traceid VARCHAR(255) NOT NULL,
+  spanid VARCHAR(255) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  timestamp TIMESTAMP NOT NULL,
+  attributes JSONB NOT NULL DEFAULT '{}',
+  createdat TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  profile VARCHAR(255) DEFAULT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE organizations (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE organization_members (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  role VARCHAR(50) NOT NULL DEFAULT 'member',
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+COMMIT;

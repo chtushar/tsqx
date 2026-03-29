@@ -1,4 +1,384 @@
 {
+  "traces": {
+    "name": "traces",
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "primaryKey": true,
+        "unique": false
+      },
+      {
+        "name": "traceid",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "primaryKey": false,
+        "unique": true
+      },
+      {
+        "name": "name",
+        "type": "VARCHAR(255)",
+        "nullable": true,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "sessionid",
+        "type": "VARCHAR(255)",
+        "nullable": true,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "userid",
+        "type": "VARCHAR(255)",
+        "nullable": true,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "status",
+        "type": "VARCHAR(10)",
+        "nullable": false,
+        "default": "'unset'",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "starttime",
+        "type": "TIMESTAMP",
+        "nullable": false,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "endtime",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "durationms",
+        "type": "INTEGER",
+        "nullable": true,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "spancount",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "0",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "totalinputtokens",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "0",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "totaloutputtokens",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "0",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "totaltokens",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "0",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "totalcost",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "0",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "tags",
+        "type": "JSONB",
+        "nullable": false,
+        "default": "'{}'",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "metadata",
+        "type": "JSONB",
+        "nullable": false,
+        "default": "'{}'",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "createdat",
+        "type": "TIMESTAMP",
+        "nullable": false,
+        "default": "NOW()",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "updatedat",
+        "type": "TIMESTAMP",
+        "nullable": false,
+        "default": "NOW()",
+        "primaryKey": false,
+        "unique": false
+      }
+    ],
+    "constraints": []
+  },
+  "spans": {
+    "name": "spans",
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "primaryKey": true,
+        "unique": false
+      },
+      {
+        "name": "traceid",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "primaryKey": false,
+        "unique": false,
+        "references": {
+          "table": "traces",
+          "column": "traceid"
+        }
+      },
+      {
+        "name": "spanid",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "primaryKey": false,
+        "unique": true
+      },
+      {
+        "name": "parentspanid",
+        "type": "VARCHAR(255)",
+        "nullable": true,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "name",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "kind",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "1",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "status",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "0",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "statusmessage",
+        "type": "TEXT",
+        "nullable": true,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "starttime",
+        "type": "TIMESTAMP",
+        "nullable": false,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "endtime",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "durationms",
+        "type": "INTEGER",
+        "nullable": true,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "provider",
+        "type": "VARCHAR(255)",
+        "nullable": true,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "model",
+        "type": "VARCHAR(255)",
+        "nullable": true,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "prompttokens",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "0",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "completiontokens",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "0",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "totaltokens",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "0",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "cost",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "0",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "source",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "'gateway'",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "input",
+        "type": "JSONB",
+        "nullable": true,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "output",
+        "type": "JSONB",
+        "nullable": true,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "attributes",
+        "type": "JSONB",
+        "nullable": false,
+        "default": "'{}'",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "createdat",
+        "type": "TIMESTAMP",
+        "nullable": false,
+        "default": "NOW()",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "updatedat",
+        "type": "TIMESTAMP",
+        "nullable": false,
+        "default": "NOW()",
+        "primaryKey": false,
+        "unique": false
+      }
+    ],
+    "constraints": []
+  },
+  "span_events": {
+    "name": "span_events",
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "primaryKey": true,
+        "unique": false
+      },
+      {
+        "name": "traceid",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "spanid",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "name",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "timestamp",
+        "type": "TIMESTAMP",
+        "nullable": false,
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "attributes",
+        "type": "JSONB",
+        "nullable": false,
+        "default": "'{}'",
+        "primaryKey": false,
+        "unique": false
+      },
+      {
+        "name": "createdat",
+        "type": "TIMESTAMP",
+        "nullable": false,
+        "default": "NOW()",
+        "primaryKey": false,
+        "unique": false
+      }
+    ],
+    "constraints": []
+  },
   "users": {
     "name": "users",
     "columns": [

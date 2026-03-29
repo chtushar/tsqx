@@ -26,3 +26,95 @@ export async function GetUser(client: Client | Pool, params: GetUserParams): Pro
   const result = await client.query(sql, [params.id]);
   return result.rows[0] ?? null;
 }
+
+export async function ListUsers(client: Client | Pool): Promise<Users[]> {
+  const sql = 'SELECT * FROM users ORDER BY name;';
+  const result = await client.query(sql);
+  return result.rows;
+}
+
+export interface CreateUserParams {
+  name: string;
+  email: string;
+}
+
+export const CreateUserParamsSchema = {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CreateUserParams",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "maxLength": 255
+    },
+    "email": {
+      "type": "string",
+      "maxLength": 255
+    }
+  },
+  "required": [
+    "name",
+    "email"
+  ],
+  "additionalProperties": false
+} as const;
+
+export async function CreateUser(client: Client | Pool, params: CreateUserParams): Promise<Users | null> {
+  const sql = 'INSERT INTO users (name, email) VALUES ($1, $2) RETURNING *;';
+  const result = await client.query(sql, [params.name, params.email]);
+  return result.rows[0] ?? null;
+}
+
+export interface DeleteUserParams {
+  id: number;
+}
+
+export const DeleteUserParamsSchema = {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeleteUserParams",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+} as const;
+
+export async function DeleteUser(client: Client | Pool, params: DeleteUserParams): Promise<void> {
+  const sql = 'DELETE FROM users WHERE id = $1;';
+  await client.query(sql, [params.id]);
+}
+
+export interface ListUsersPaginatedParams {
+  limit: number;
+  offset: number;
+}
+
+export const ListUsersPaginatedParamsSchema = {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ListUsersPaginatedParams",
+  "type": "object",
+  "properties": {
+    "limit": {
+      "type": "integer"
+    },
+    "offset": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "limit",
+    "offset"
+  ],
+  "additionalProperties": false
+} as const;
+
+export async function ListUsersPaginated(client: Client | Pool, params: ListUsersPaginatedParams): Promise<Users[]> {
+  const sql = 'SELECT * FROM users\nORDER BY name\nLIMIT $1 OFFSET $2\n;';
+  const result = await client.query(sql, [params.limit, params.offset]);
+  return result.rows;
+}

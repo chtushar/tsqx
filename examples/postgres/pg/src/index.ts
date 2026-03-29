@@ -1,11 +1,22 @@
 import { Pool } from "pg";
 import { env } from "node:process";
-import { GetUser } from "@db/queries";
+import {
+  DeleteUser,
+  GetTraceStats,
+  GetUser,
+  ListTraces,
+  ListUsersPaginated,
+} from "@db/queries";
 
 const pg = new Pool({
   connectionString: env.DATABASE_URL!,
 });
 
-GetUser(pg, {
+ListUsersPaginated(pg, {
+  limit: 1,
+  offset: 2,
+});
+
+DeleteUser(pg, {
   id: 1,
 });

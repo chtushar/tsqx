@@ -1,5 +1,5 @@
 import { pascalCase, type SchemaSnapshot } from "@tsqx/core";
-import type { QueryDef, QueryCommand } from "@tsqx/core";
+import type { QueryDef } from "@tsqx/core";
 import { sqlTypeToJsonSchema, sqlTypeToTsType } from "./types";
 
 function camelCase(str: string): string {
@@ -11,7 +11,11 @@ function generateParamInterface(query: QueryDef): string | null {
 
   const name = `${pascalCase(query.name)}Params`;
   const fields = query.params
-    .map((p) => `  ${p.name}: ${sqlTypeToTsType(p.sqlType)};`)
+    .map((p) => {
+      const base = sqlTypeToTsType(p.sqlType);
+      const type = p.nullable ? `${base} | null` : base;
+      return `  ${p.name}: ${type};`;
+    })
     .join("\n");
 
   return `export interface ${name} {\n${fields}\n}`;
@@ -25,8 +29,18 @@ function generateParamSchema(query: QueryDef): string | null {
   const required: string[] = [];
 
   for (const param of query.params) {
-    properties[param.name] = sqlTypeToJsonSchema(param.sqlType);
-    required.push(param.name);
+    const jsonType = sqlTypeToJsonSchema(param.sqlType);
+    if (param.nullable) {
+      properties[param.name] = {
+        ...jsonType,
+        type: Array.isArray(jsonType.type)
+          ? [...jsonType.type, "null"]
+          : [jsonType.type, "null"],
+      };
+    } else {
+      properties[param.name] = jsonType;
+      required.push(param.name);
+    }
   }
 
   const schema = {
@@ -51,7 +65,6 @@ function generateResultType(query: QueryDef, snapshot: SchemaSnapshot): string |
   const table = snapshot[query.returnsTable];
   const typeName = pascalCase(query.returnsTable);
 
-  // If returning all columns, just re-export the table type
   if (
     query.returnsColumns.length === table.columns.length &&
     query.returnsColumns.every((c) => table.columns.some((tc) => tc.name === c))
@@ -59,7 +72,6 @@ function generateResultType(query: QueryDef, snapshot: SchemaSnapshot): string |
     return typeName;
   }
 
-  // Partial return — generate a Pick type
   const cols = query.returnsColumns.map((c) => `"${c}"`).join(" | ");
   return `Pick<${typeName}, ${cols}>`;
 }
@@ -115,7 +127,8 @@ function generateFunction(query: QueryDef, snapshot: SchemaSnapshot): string {
     ? `client: Client | Pool, params: ${paramsType}`
     : "client: Client | Pool";
 
-  const sql = query.sql.replace(/'/g, "\\'").replace(/\n/g, "\\n");
+  // Use expandedSql (with positional params) for the actual query
+  const sql = query.expandedSql.replace(/'/g, "\\'").replace(/\n/g, "\\n");
 
   const lines: string[] = [];
   lines.push(`export async function ${fnName}(${args}): ${returnType} {`);
@@ -130,7 +143,6 @@ export function generateQueryFiles(
   queries: QueryDef[],
   snapshot: SchemaSnapshot,
 ): Record<string, string> {
-  // Group queries by source file
   const grouped = new Map<string, QueryDef[]>();
   for (const query of queries) {
     const key = query.sourceFile.replace(/\.sql$/, "");
@@ -146,7 +158,6 @@ export function generateQueryFiles(
       'import type { Client, Pool, QueryResult } from "pg";',
     ];
 
-    // Collect table type imports
     const tableImports = new Set<string>();
     for (const query of fileQueries) {
       if (query.returnsTable && snapshot[query.returnsTable]) {
@@ -163,21 +174,18 @@ export function generateQueryFiles(
     lines.push("");
 
     for (const query of fileQueries) {
-      // Param interface
       const paramInterface = generateParamInterface(query);
       if (paramInterface) {
         lines.push(paramInterface);
         lines.push("");
       }
 
-      // Param JSON Schema
       const paramSchema = generateParamSchema(query);
       if (paramSchema) {
         lines.push(paramSchema);
         lines.push("");
       }
 
-      // Function
       lines.push(generateFunction(query, snapshot));
       lines.push("");
     }

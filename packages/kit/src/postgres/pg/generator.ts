@@ -1,7 +1,15 @@
 import type { Operation, ColumnDef, TableDef } from "@tsqx/core";
 
+function quoteIdent(name: string): string {
+  // Quote if name has uppercase letters (needs preserving) or is a reserved word
+  if (name !== name.toLowerCase()) {
+    return `"${name}"`;
+  }
+  return name;
+}
+
 function columnToSQL(col: ColumnDef): string {
-  const parts = [col.name, col.type];
+  const parts = [quoteIdent(col.name), col.type];
 
   if (col.primaryKey) {
     parts.push("PRIMARY KEY");
@@ -20,7 +28,7 @@ function columnToSQL(col: ColumnDef): string {
   }
 
   if (col.references) {
-    parts.push(`REFERENCES ${col.references.table}(${col.references.column})`);
+    parts.push(`REFERENCES ${quoteIdent(col.references.table)}(${quoteIdent(col.references.column)})`);
   }
 
   return parts.join(" ");
@@ -35,20 +43,20 @@ function createTableSQL(table: TableDef): string {
     if (constraint.type === "primary_key") {
       // Skip if single-column PK (already inline)
       if (constraint.columns.length > 1) {
-        cols.push(`  ${name}PRIMARY KEY (${constraint.columns.join(", ")})`);
+        cols.push(`  ${name}PRIMARY KEY (${constraint.columns.map(quoteIdent).join(", ")})`);
       }
     } else if (constraint.type === "unique") {
       if (constraint.columns.length > 1) {
-        cols.push(`  ${name}UNIQUE (${constraint.columns.join(", ")})`);
+        cols.push(`  ${name}UNIQUE (${constraint.columns.map(quoteIdent).join(", ")})`);
       }
     } else if (constraint.type === "foreign_key" && constraint.references) {
       cols.push(
-        `  ${name}FOREIGN KEY (${constraint.columns.join(", ")}) REFERENCES ${constraint.references.table}(${constraint.references.columns.join(", ")})`,
+        `  ${name}FOREIGN KEY (${constraint.columns.map(quoteIdent).join(", ")}) REFERENCES ${quoteIdent(constraint.references.table)}(${constraint.references.columns.map(quoteIdent).join(", ")})`,
       );
     }
   }
 
-  return `CREATE TABLE ${table.name} (\n${cols.join(",\n")}\n);`;
+  return `CREATE TABLE ${quoteIdent(table.name)} (\n${cols.join(",\n")}\n);`;
 }
 
 function operationToSQL(op: Operation): string {
@@ -57,53 +65,45 @@ function operationToSQL(op: Operation): string {
       return createTableSQL(op.table);
 
     case "drop_table":
-      return `DROP TABLE IF EXISTS ${op.tableName};`;
+      return `DROP TABLE IF EXISTS ${quoteIdent(op.tableName)};`;
 
     case "add_column":
-      return `ALTER TABLE ${op.tableName} ADD COLUMN ${columnToSQL(op.column)};`;
+      return `ALTER TABLE ${quoteIdent(op.tableName)} ADD COLUMN ${columnToSQL(op.column)};`;
 
     case "drop_column":
-      return `ALTER TABLE ${op.tableName} DROP COLUMN ${op.columnName};`;
+      return `ALTER TABLE ${quoteIdent(op.tableName)} DROP COLUMN ${quoteIdent(op.columnName)};`;
 
     case "alter_column": {
       const stmts: string[] = [];
       const { tableName, columnName, from, to } = op;
+      const qt = quoteIdent(tableName);
+      const qc = quoteIdent(columnName);
 
       if (from.type !== to.type) {
-        stmts.push(
-          `ALTER TABLE ${tableName} ALTER COLUMN ${columnName} SET DATA TYPE ${to.type};`,
-        );
+        stmts.push(`ALTER TABLE ${qt} ALTER COLUMN ${qc} SET DATA TYPE ${to.type};`);
       }
 
       if (from.nullable && !to.nullable) {
-        stmts.push(
-          `ALTER TABLE ${tableName} ALTER COLUMN ${columnName} SET NOT NULL;`,
-        );
+        stmts.push(`ALTER TABLE ${qt} ALTER COLUMN ${qc} SET NOT NULL;`);
       } else if (!from.nullable && to.nullable) {
-        stmts.push(
-          `ALTER TABLE ${tableName} ALTER COLUMN ${columnName} DROP NOT NULL;`,
-        );
+        stmts.push(`ALTER TABLE ${qt} ALTER COLUMN ${qc} DROP NOT NULL;`);
       }
 
       if (from.default !== to.default) {
         if (to.default !== undefined) {
-          stmts.push(
-            `ALTER TABLE ${tableName} ALTER COLUMN ${columnName} SET DEFAULT ${to.default};`,
-          );
+          stmts.push(`ALTER TABLE ${qt} ALTER COLUMN ${qc} SET DEFAULT ${to.default};`);
         } else {
-          stmts.push(
-            `ALTER TABLE ${tableName} ALTER COLUMN ${columnName} DROP DEFAULT;`,
-          );
+          stmts.push(`ALTER TABLE ${qt} ALTER COLUMN ${qc} DROP DEFAULT;`);
         }
       }
 
       if (!from.unique && to.unique) {
         stmts.push(
-          `ALTER TABLE ${tableName} ADD CONSTRAINT ${tableName}_${columnName}_unique UNIQUE (${columnName});`,
+          `ALTER TABLE ${qt} ADD CONSTRAINT ${tableName}_${columnName}_unique UNIQUE (${qc});`,
         );
       } else if (from.unique && !to.unique) {
         stmts.push(
-          `ALTER TABLE ${tableName} DROP CONSTRAINT ${tableName}_${columnName}_unique;`,
+          `ALTER TABLE ${qt} DROP CONSTRAINT ${tableName}_${columnName}_unique;`,
         );
       }
 

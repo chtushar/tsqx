@@ -1,6 +1,15 @@
 import { ok, err, type Result } from "neverthrow";
 import { SchemaError, type SchemaSnapshot, type TableDef, type ColumnDef, type TableConstraint } from "@tsqx/core";
 
+/** Normalize a SQL identifier: preserve casing if double-quoted, lowercase otherwise. */
+function normalizeId(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed.toLowerCase();
+}
+
 function stripComments(sql: string): string {
   // Remove block comments
   sql = sql.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -13,12 +22,13 @@ function parseColumnDef(raw: string): ColumnDef | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
 
-  // Match: column_name TYPE ...rest
-  const match = trimmed.match(/^"?(\w+)"?\s+(.+)$/is);
+  // Match: "quotedName" or unquotedName followed by TYPE ...rest
+  const match = trimmed.match(/^("(\w+)"|(\w+))\s+(.+)$/is);
   if (!match) return null;
 
-  const name = match[1].toLowerCase();
-  const rest = match[2].trim();
+  // Quoted names preserve casing, unquoted get lowercased
+  const name = match[2] ?? match[3].toLowerCase();
+  const rest = match[4].trim();
 
   // Extract the type — single word, optionally followed by known multi-word suffixes
   // e.g. DOUBLE PRECISION, CHARACTER VARYING, TIME ZONE, WITH TIME ZONE
@@ -43,11 +53,15 @@ function parseColumnDef(raw: string): ColumnDef | null {
   }
 
   let references: ColumnDef["references"];
-  const refMatch = modifiers.match(
+  const restModifiers = rest.slice(typeMatch[0].length).trim();
+  const refMatch = restModifiers.match(
     /REFERENCES\s+"?(\w+)"?\s*\(\s*"?(\w+)"?\s*\)/i,
   );
   if (refMatch) {
-    references = { table: refMatch[1].toLowerCase(), column: refMatch[2].toLowerCase() };
+    // Unquoted identifiers get lowercased, quoted preserve casing
+    const refTable = restModifiers.includes(`"${refMatch[1]}"`) ? refMatch[1] : refMatch[1].toLowerCase();
+    const refCol = restModifiers.includes(`"${refMatch[2]}"`) ? refMatch[2] : refMatch[2].toLowerCase();
+    references = { table: refTable, column: refCol };
   }
 
   return {
@@ -90,7 +104,14 @@ function parseTableConstraint(raw: string): TableConstraint | null {
   if (!colsMatch) return null;
   const columns = colsMatch[1]
     .split(",")
-    .map((c) => c.trim().replace(/"/g, "").toLowerCase());
+    .map((c) => {
+      const trimmed = c.trim();
+      // Quoted: preserve casing. Unquoted: lowercase.
+      if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+        return trimmed.slice(1, -1);
+      }
+      return trimmed.replace(/"/g, "").toLowerCase();
+    });
 
   if (working.startsWith("PRIMARY KEY")) {
     return { type: "primary_key", ...(name && { name }), columns };
@@ -107,7 +128,13 @@ function parseTableConstraint(raw: string): TableConstraint | null {
     if (!refMatch) return null;
     const refColumns = refMatch[2]
       .split(",")
-      .map((c) => c.trim().replace(/"/g, "").toLowerCase());
+      .map((c) => {
+        const trimmed = c.trim();
+        if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+          return trimmed.slice(1, -1);
+        }
+        return trimmed.replace(/"/g, "").toLowerCase();
+      });
     return {
       type: "foreign_key",
       ...(name && { name }),
@@ -121,14 +148,15 @@ function parseTableConstraint(raw: string): TableConstraint | null {
 
 function parseCreateTable(sql: string): Result<TableDef, SchemaError> {
   const tableMatch = sql.match(
-    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?\s*\(([\s\S]+)\)/i,
+    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?("(\w+)"|(\w+))\s*\(([\s\S]+)\)/i,
   );
   if (!tableMatch) {
     return err(new SchemaError(`Failed to parse CREATE TABLE statement`));
   }
 
-  const tableName = tableMatch[1].toLowerCase();
-  const body = tableMatch[2];
+  // Quoted table names preserve casing, unquoted get lowercased
+  const tableName = tableMatch[2] ?? tableMatch[3].toLowerCase();
+  const body = tableMatch[4];
 
   // Split body by commas, respecting parentheses
   const lines: string[] = [];

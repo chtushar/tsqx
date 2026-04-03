@@ -88,6 +88,21 @@ function namedToPositional(sql: string, paramNames: string[]): string {
   return result;
 }
 
+function addNullableCasts(sql: string, params: QueryParam[]): string {
+  let result = sql;
+  for (const param of params) {
+    if (!param.nullable) continue;
+    const pgType = param.sqlType.toLowerCase();
+    // Cast the first occurrence in IS NULL pattern: $N IS NULL → $N::type IS NULL
+    // Use a function replacement to avoid $1 backreference issues
+    result = result.replace(
+      new RegExp(`\\$${param.index}(\\s+IS\\s+NULL)`, "i"),
+      (_, isNull) => "$" + param.index + "::" + pgType + isNull,
+    );
+  }
+  return result;
+}
+
 function resolveParamType(
   paramName: string,
   sql: string,
@@ -380,7 +395,7 @@ export function parseQueryFile(
 
       // Extract named params and convert to positional
       const namedParams = extractNamedParams(cleanedSql);
-      const positionalSql = namedToPositional(cleanedSql, namedParams);
+      let positionalSql = namedToPositional(cleanedSql, namedParams);
 
       // Resolve param types
       const params: QueryParam[] = namedParams.map((paramName, idx) => {
@@ -392,6 +407,9 @@ export function parseQueryFile(
           nullable: resolved.nullable,
         };
       });
+
+      // Add ::type casts for nullable params so PG can infer types
+      positionalSql = addNullableCasts(positionalSql, params);
 
       const returnsTable = resolveReturnsTable(cleanedSql, snapshot);
       const returnsColumns = resolveReturnsColumns(cleanedSql, returnsTable, snapshot);
@@ -521,7 +539,7 @@ export function parseQueryFiles(
         }
 
         const namedParams = extractNamedParams(cleanedSql);
-        const positionalSql = namedToPositional(cleanedSql, namedParams);
+        let positionalSql = namedToPositional(cleanedSql, namedParams);
 
         const params: QueryParam[] = namedParams.map((paramName, idx) => {
           const resolved = resolveParamType(paramName, cleanedSql, snapshot, mixinParamInfo);
@@ -532,6 +550,9 @@ export function parseQueryFiles(
             nullable: resolved.nullable,
           };
         });
+
+        // Add ::type casts for nullable params so PG can infer types
+        positionalSql = addNullableCasts(positionalSql, params);
 
         const returnsTable = resolveReturnsTable(cleanedSql, snapshot);
         const returnsColumns = resolveReturnsColumns(cleanedSql, returnsTable, snapshot);

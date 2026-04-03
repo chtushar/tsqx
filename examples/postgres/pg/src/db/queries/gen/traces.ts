@@ -74,7 +74,7 @@ export const ListTracesParamsSchema = {
 } as const;
 
 export async function ListTraces(client: Client | Pool, params: ListTracesParams): Promise<Traces[]> {
-  const sql = 'SELECT * FROM traces\nWHERE ($1 IS NULL OR "sessionId" = $1)\nAND ($2 IS NULL OR "userId" = $2)\nAND ($3 IS NULL OR "status" = $3)\nAND ($4 IS NULL OR "name" ILIKE \'%\' || $4 || \'%\')\nAND ($5 IS NULL OR "startTime" >= $5)\nAND ($6 IS NULL OR "startTime" <= $6)\nAND ($7 IS NULL OR "tags" @> $7)\nORDER BY "startTime" DESC\nLIMIT $8 OFFSET $9\n;';
+  const sql = 'SELECT * FROM traces\nWHERE ($1::varchar IS NULL OR "sessionId" = $1)\nAND ($2::varchar IS NULL OR "userId" = $2)\nAND ($3::varchar IS NULL OR "status" = $3)\nAND ($4::text IS NULL OR "name" ILIKE \'%\' || $4 || \'%\')\nAND ($5 IS NULL OR "startTime" >= $5)\nAND ($6 IS NULL OR "startTime" <= $6)\nAND ($7::jsonb IS NULL OR "tags" @> $7)\nORDER BY "startTime" DESC\nLIMIT $8 OFFSET $9\n;';
   const result = await client.query(sql, [params.session_id, params.user_id, params.status, params.name_filter, params.start_date, params.end_date, params.tag_filters, params.limit, params.offset]);
   return result.rows;
 }
@@ -141,7 +141,7 @@ export const CountTracesParamsSchema = {
 } as const;
 
 export async function CountTraces(client: Client | Pool, params: CountTracesParams): Promise<Pick<Traces, "count(*)::integer as total"> | null> {
-  const sql = 'SELECT COUNT(*)::integer as total FROM traces\nWHERE ($1 IS NULL OR "sessionId" = $1)\nAND ($2 IS NULL OR "userId" = $2)\nAND ($3 IS NULL OR "status" = $3)\nAND ($4 IS NULL OR "name" ILIKE \'%\' || $4 || \'%\')\nAND ($5 IS NULL OR "startTime" >= $5)\nAND ($6 IS NULL OR "startTime" <= $6)\nAND ($7 IS NULL OR "tags" @> $7)\n;';
+  const sql = 'SELECT COUNT(*)::integer as total FROM traces\nWHERE ($1::varchar IS NULL OR "sessionId" = $1)\nAND ($2::varchar IS NULL OR "userId" = $2)\nAND ($3::varchar IS NULL OR "status" = $3)\nAND ($4::text IS NULL OR "name" ILIKE \'%\' || $4 || \'%\')\nAND ($5 IS NULL OR "startTime" >= $5)\nAND ($6 IS NULL OR "startTime" <= $6)\nAND ($7::jsonb IS NULL OR "tags" @> $7)\n;';
   const result = await client.query(sql, [params.session_id, params.user_id, params.status, params.name_filter, params.start_date, params.end_date, params.tag_filters]);
   return result.rows[0] ?? null;
 }
@@ -265,7 +265,7 @@ export const GetTraceStatsParamsSchema = {
 } as const;
 
 export async function GetTraceStats(client: Client | Pool, params: GetTraceStatsParams): Promise<Pick<Traces, > | null> {
-  const sql = 'SELECT\nCOUNT(*)::integer AS "totalTraces",\nCOALESCE(AVG("durationMs"), 0)::integer AS "avgDurationMs",\nCOUNT(CASE WHEN "status" = \'error\' THEN 1 END)::integer AS "errorCount",\nCOALESCE(SUM("totalCost"), 0)::integer AS "totalCost",\nCOALESCE(SUM("totalTokens"), 0)::integer AS "totalTokens",\nCOALESCE(SUM("spanCount"), 0)::integer AS "totalSpans"\nFROM traces\nWHERE "startTime" >= $1 AND "startTime" <= $2\n-- List traces with filtering and pagination (equivalent to Kysely\'s listTraces)\nAND ($3 IS NULL OR "sessionId" = $3)\nAND ($4 IS NULL OR "userId" = $4);';
+  const sql = 'SELECT\nCOUNT(*)::integer AS "totalTraces",\nCOALESCE(AVG("durationMs"), 0)::integer AS "avgDurationMs",\nCOUNT(CASE WHEN "status" = \'error\' THEN 1 END)::integer AS "errorCount",\nCOALESCE(SUM("totalCost"), 0)::integer AS "totalCost",\nCOALESCE(SUM("totalTokens"), 0)::integer AS "totalTokens",\nCOALESCE(SUM("spanCount"), 0)::integer AS "totalSpans"\nFROM traces\nWHERE "startTime" >= $1 AND "startTime" <= $2\n-- List traces with filtering and pagination (equivalent to Kysely\'s listTraces)\nAND ($3::varchar IS NULL OR "sessionId" = $3)\nAND ($4::varchar IS NULL OR "userId" = $4);';
   const result = await client.query(sql, [params.start_date, params.end_date, params.session_id, params.user_id]);
   return result.rows[0] ?? null;
 }

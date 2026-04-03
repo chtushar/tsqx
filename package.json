@@ -4,11 +4,16 @@
   "scripts": {
     "build": "pnpm -r --filter './packages/*' build",
     "test": "vitest",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "release": "bumpp -r"
   },
   "packageManager": "pnpm@10.29.2",
   "devDependencies": {
+    "@testcontainers/postgresql": "^11.13.0",
+    "@types/pg": "^8.20.0",
     "bumpp": "^11.0.1",
+    "pg": "^8.20.0",
+    "testcontainers": "^11.13.0",
     "tsdown": "^0.21.6",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"

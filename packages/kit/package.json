@@ -13,6 +13,11 @@
       "import": "./dist/postgres/pg/index.mjs",
       "require": "./dist/postgres/pg/index.cjs",
       "types": "./dist/postgres/pg/index.d.ts"
+    },
+    "./sqlite/d1": {
+      "import": "./dist/sqlite/d1/index.mjs",
+      "require": "./dist/sqlite/d1/index.cjs",
+      "types": "./dist/sqlite/d1/index.d.ts"
     }
   },
   "main": "./dist/index.cjs",

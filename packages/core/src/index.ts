@@ -1,4 +1,4 @@
-export { configSchema, parseConfig, type Config, type ConfigInput } from "./config";
+export { parseConfig, type Config, type ConfigInput } from "./config";
 export {
   TsqxError,
   ConfigError,

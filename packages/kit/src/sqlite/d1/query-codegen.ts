@@ -1,0 +1,199 @@
+import { pascalCase, type SchemaSnapshot } from "@tsqx/core";
+import type { QueryDef } from "@tsqx/core";
+import { sqlTypeToJsonSchema, sqlTypeToTsType } from "./types";
+
+function camelCase(str: string): string {
+  return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+function generateParamInterface(query: QueryDef): string | null {
+  if (query.params.length === 0) return null;
+
+  const name = `${pascalCase(query.name)}Params`;
+  const fields = query.params
+    .map((p) => {
+      const base = sqlTypeToTsType(p.sqlType);
+      const type = p.nullable ? `${base} | null` : base;
+      return `  ${p.name}: ${type};`;
+    })
+    .join("\n");
+
+  return `export interface ${name} {\n${fields}\n}`;
+}
+
+function generateParamSchema(query: QueryDef): string | null {
+  if (query.params.length === 0) return null;
+
+  const name = `${pascalCase(query.name)}ParamsSchema`;
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+
+  for (const param of query.params) {
+    const jsonType = sqlTypeToJsonSchema(param.sqlType);
+    if (param.nullable) {
+      properties[param.name] = {
+        ...jsonType,
+        type: Array.isArray(jsonType.type)
+          ? [...jsonType.type, "null"]
+          : [jsonType.type, "null"],
+      };
+    } else {
+      properties[param.name] = jsonType;
+      required.push(param.name);
+    }
+  }
+
+  const schema = {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    title: `${pascalCase(query.name)}Params`,
+    type: "object",
+    properties,
+    required,
+    additionalProperties: false,
+  };
+
+  return `export const ${name} = ${JSON.stringify(schema, null, 2)} as const;`;
+}
+
+function generateResultType(query: QueryDef, snapshot: SchemaSnapshot): string | null {
+  if (query.command === "exec" || query.command === "execrows" || query.command === "execresult") {
+    return null;
+  }
+
+  if (!query.returnsTable || !snapshot[query.returnsTable]) return null;
+
+  const table = snapshot[query.returnsTable];
+  const typeName = pascalCase(query.returnsTable);
+
+  if (
+    query.returnsColumns.length === table.columns.length &&
+    query.returnsColumns.every((c) => table.columns.some((tc) => tc.name === c))
+  ) {
+    return typeName;
+  }
+
+  const cols = query.returnsColumns.map((c) => `"${c}"`).join(" | ");
+  return `Pick<${typeName}, ${cols}>`;
+}
+
+function generateReturnType(query: QueryDef, resultType: string | null): string {
+  switch (query.command) {
+    case "one":
+      return `Promise<${resultType ?? "unknown"} | null>`;
+    case "many":
+      return `Promise<${resultType ?? "unknown"}[]>`;
+    case "exec":
+      return "Promise<void>";
+    case "execrows":
+      return "Promise<number>";
+    case "execresult":
+      return "Promise<D1Result<unknown>>";
+    default:
+      return "Promise<void>";
+  }
+}
+
+function generateFunctionBody(query: QueryDef): string {
+  const paramArgs = query.params.map((p) => `params.${p.name}`).join(", ");
+  const bindCall = query.params.length > 0
+    ? `.bind(${paramArgs})`
+    : "";
+
+  switch (query.command) {
+    case "one":
+      return `  const result = await db.prepare(sql)${bindCall}.first<${generateResultType(query, {} as SchemaSnapshot) ?? "unknown"}>();\n  return result ?? null;`;
+    case "many":
+      return `  const result = await db.prepare(sql)${bindCall}.all();\n  return result.results;`;
+    case "exec":
+      return `  await db.prepare(sql)${bindCall}.run();`;
+    case "execrows":
+      return `  const result = await db.prepare(sql)${bindCall}.run();\n  return result.meta.changes;`;
+    case "execresult":
+      return `  return await db.prepare(sql)${bindCall}.run();`;
+    default:
+      return `  await db.prepare(sql)${bindCall}.run();`;
+  }
+}
+
+function generateFunction(query: QueryDef, snapshot: SchemaSnapshot): string {
+  const fnName = camelCase(query.name);
+  const resultType = generateResultType(query, snapshot);
+  const returnType = generateReturnType(query, resultType);
+
+  const hasParams = query.params.length > 0;
+  const paramsType = hasParams ? `${pascalCase(query.name)}Params` : null;
+
+  const args = hasParams
+    ? `db: D1Database, params: ${paramsType}`
+    : "db: D1Database";
+
+  const sql = query.expandedSql.replace(/'/g, "\\'").replace(/\n/g, "\\n");
+
+  const lines: string[] = [];
+  lines.push(`export async function ${fnName}(${args}): ${returnType} {`);
+  lines.push(`  const sql = '${sql}';`);
+  lines.push(generateFunctionBody(query));
+  lines.push("}");
+
+  return lines.join("\n");
+}
+
+export function generateQueryFiles(
+  queries: QueryDef[],
+  snapshot: SchemaSnapshot,
+): Record<string, string> {
+  const grouped = new Map<string, QueryDef[]>();
+  for (const query of queries) {
+    const key = query.sourceFile.replace(/\.sql$/, "");
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(query);
+  }
+
+  const files: Record<string, string> = {};
+
+  for (const [basename, fileQueries] of grouped) {
+    const lines: string[] = [
+      "// This file is auto-generated by tsqx. Do not edit manually.",
+    ];
+
+    // D1 types are globally available in Workers, but add a reference comment
+    lines.push("// D1Database type is available globally in Cloudflare Workers");
+    lines.push("");
+
+    const tableImports = new Set<string>();
+    for (const query of fileQueries) {
+      if (query.returnsTable && snapshot[query.returnsTable]) {
+        tableImports.add(query.returnsTable);
+      }
+    }
+    if (tableImports.size > 0) {
+      const imports = [...tableImports]
+        .map((t) => `type ${pascalCase(t)}`)
+        .join(", ");
+      lines.push(`import { ${imports} } from "../../generated";`);
+    }
+
+    lines.push("");
+
+    for (const query of fileQueries) {
+      const paramInterface = generateParamInterface(query);
+      if (paramInterface) {
+        lines.push(paramInterface);
+        lines.push("");
+      }
+
+      const paramSchema = generateParamSchema(query);
+      if (paramSchema) {
+        lines.push(paramSchema);
+        lines.push("");
+      }
+
+      lines.push(generateFunction(query, snapshot));
+      lines.push("");
+    }
+
+    files[`${basename}.ts`] = lines.join("\n");
+  }
+
+  return files;
+}

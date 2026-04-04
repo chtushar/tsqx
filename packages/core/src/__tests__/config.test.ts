@@ -7,6 +7,9 @@ const mockDialect: Dialect = {
   name: "mock",
   parseSchema: () => ok({}),
   generateSQL: () => "",
+  sqlTypeToJsonSchema: () => ({ type: "string" }),
+  sqlTypeToTsType: () => "string",
+  generateQueryCode: () => ({}),
 };
 
 describe("parseConfig", () => {

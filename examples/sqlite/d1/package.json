@@ -1,0 +1,12 @@
+{
+  "name": "@tsqx/example-sqlite-d1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@tsqx/kit": "workspace:^"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "tsx": "latest"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "baseUrl": ".",
+    "types": ["@cloudflare/workers-types"],
+    "paths": {
+      "@db/queries": ["./src/db/queries"],
+      "@db/queries/*": ["./src/db/queries/*"],
+      "@db/generated": ["./src/db/generated"],
+      "@db/generated/*": ["./src/db/generated/*"]
+    }
+  },
+  "include": ["src"]
+}

@@ -52,6 +52,19 @@ importers:
         specifier: latest
         version: 4.21.0
 
+  examples/sqlite/d1:
+    dependencies:
+      '@tsqx/kit':
+        specifier: workspace:^
+        version: link:../../../packages/kit
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: latest
+        version: 4.20260404.1
+      tsx:
+        specifier: latest
+        version: 4.21.0
+
   packages/cli:
     dependencies:
       '@tsqx/core':
@@ -101,6 +114,9 @@ packages:
 
   '@balena/dockerignore@1.0.2':
     resolution: {integrity: sha512-wMue2Sy4GAVTk6Ic4tJVcnfdau+gx2EnG7S+uAEe+TWJFqE4YoWN4/H8MSLj4eYJKxGg26lZwboEniNiNwZQ6Q==}
+
+  '@cloudflare/workers-types@4.20260404.1':
+    resolution: {integrity: sha512-jfZfktdn3D0ceA59i4lkMgPUR9p5Wd6trtNLQR1RTgF59iVt9/yegkiEZv0TQvJPXlmQOU1D0pAYz7cMztqErg==}
 
   '@emnapi/core@1.9.1':
     resolution: {integrity: sha512-mukuNALVsoix/w1BJwFzwXBN/dHeejQtuVzcDsfOEsdpCumXb/E9j8w11h5S54tT1xhifGfbbSm/ICrObRb3KA==}
@@ -1531,6 +1547,8 @@ snapshots:
       '@babel/helper-validator-identifier': 8.0.0-rc.3
 
   '@balena/dockerignore@1.0.2': {}
+
+  '@cloudflare/workers-types@4.20260404.1': {}
 
   '@emnapi/core@1.9.1':
     dependencies:

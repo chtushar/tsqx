@@ -280,6 +280,52 @@ SELECT * FROM users WHERE age > $min_age::bigint;
       expect(queries[0].params[0].sqlType).toBe("BIGINT");
     });
 
+    it("::type stripping preserves AND between conditions", () => {
+      const result = parseQueryFile("users.sql", `
+-- @name DateRange :many
+SELECT * FROM users
+WHERE created_at >= $start_date::timestamp
+AND created_at <= $end_date::timestamp;
+      `, snapshot);
+
+      expect(result.isOk()).toBe(true);
+      const { queries } = result._unsafeUnwrap();
+      expect(queries[0].expandedSql).toContain("AND");
+      expect(queries[0].expandedSql).toContain(">= $1");
+      expect(queries[0].expandedSql).toContain("<= $2");
+    });
+
+    it("::type stripping preserves IS NULL pattern", () => {
+      const result = parseQueryFile("users.sql", `
+-- @name FilterUsers :many
+SELECT * FROM users
+WHERE ($1::varchar IS NULL OR name = $1);
+      `, snapshot);
+
+      expect(result.isOk()).toBe(true);
+      const { queries } = result._unsafeUnwrap();
+      // Should have IS NULL intact, not eaten by ::type stripping
+      expect(queries[0].expandedSql).toContain("IS NULL");
+    });
+
+    it("::type stripping preserves AND before nullable param", () => {
+      const result = parseQueryFile("users.sql", `
+-- @name ComplexFilter :many
+SELECT * FROM users
+WHERE active = true
+AND ($1::varchar IS NULL OR name = $1)
+AND ($2::varchar IS NULL OR email = $2);
+      `, snapshot);
+
+      expect(result.isOk()).toBe(true);
+      const { queries } = result._unsafeUnwrap();
+      const sql = queries[0].expandedSql;
+      // Both AND keywords should be preserved
+      expect((sql.match(/AND/g) || []).length).toBe(2);
+      // Both IS NULL patterns should be preserved
+      expect((sql.match(/IS NULL/g) || []).length).toBe(2);
+    });
+
     it("merges mixin params into query params", () => {
       const result = parseQueryFile("users.sql", `
 -- @mixin paginate($limit, $offset)

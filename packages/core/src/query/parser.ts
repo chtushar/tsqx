@@ -50,9 +50,10 @@ interface InlineTypeHint {
 
 function extractInlineTypeHints(sql: string): { cleaned: string; hints: InlineTypeHint[] } {
   const hints: InlineTypeHint[] = [];
-  // Match $name::type patterns in SQL and strip the ::type part
+  // Match $name::type patterns and strip the ::type part
+  // Type is a single word optionally followed by (N) — no multi-word to avoid eating AND/IS/etc.
   const cleaned = sql.replace(
-    /\$([a-zA-Z_]\w*)::(\w+(?:\s+\w+)?(?:\(\d+\))?)/g,
+    /\$([a-zA-Z_]\w*)::(\w+(?:\(\d+\))?)/g,
     (_, name, type) => {
       hints.push({ name, sqlType: type.toUpperCase() });
       return `$${name}`;
